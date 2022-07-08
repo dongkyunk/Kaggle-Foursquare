@@ -22,8 +22,8 @@ def train(cfg: Config) -> None:
 
     datamodule = FourSquareDataModule(cfg=cfg)
     num_of_classes = datamodule.get_num_of_classes()
-    model = FourSquareModel(cfg=cfg, num_of_classes=num_of_classes)
-    # model = FourSquareModel.load_from_checkpoint(cfg.path_cfg.lm_model_path, cfg=cfg, num_of_classes=num_of_classes)
+    # model = FourSquareModel(cfg=cfg, num_of_classes=num_of_classes)
+    model = FourSquareModel.load_from_checkpoint(cfg.path_cfg.lm_model_path, cfg=cfg, num_of_classes=num_of_classes)
 
     checkpoint_callback = ModelCheckpoint(
         filename='{epoch:02d}-{val_loss:.4f}',

@@ -1,4 +1,3 @@
-from cgi import test
 import gc
 import math
 import torch
@@ -6,8 +5,6 @@ import difflib
 import Levenshtein
 import pandas as pd
 import numpy as np
-
-from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from numba import jit
@@ -62,8 +59,8 @@ def create_text_embd(df, model, tokenizer, device):
 
 
 def get_geospatial_neightbors(k, df):
-    knn = NearestNeighbors(n_neighbors=k)
-    knn.fit(df[['latitude', 'longitude']], df.index)
+    knn = NearestNeighbors(n_neighbors=k, metric='haversine', n_jobs=-1)
+    knn.fit(np.deg2rad(df[['latitude', 'longitude']]), df.index)
     dists, nears = knn.kneighbors(df[['latitude', 'longitude']])
     return dists, nears
 
@@ -121,18 +118,12 @@ def create_pair_df(df, k, topk_indices, cos_sims_word, cos_sims_dist, nears, dis
     test_df = pd.concat(test_df)
     test_df = test_df.fillna(0)
     test_df = test_df.drop_duplicates()
-    # test_df = test_df[~test_df[['id', 'match_id']].apply(frozenset, axis=1).duplicated()]
+
+    # Remove duplicate pairs and self-match 
+    test_df = test_df[~test_df[['id', 'match_id']].apply(frozenset, axis=1).duplicated()]
+    test_df = test_df[test_df['id']!=test_df['match_id']]
+
     return test_df
-
-
-# @jit(nopython=True, cache=True)
-# def LCS(S, T):
-#     dp = [[0] * (len(T) + 1) for _ in range(len(S) + 1)]
-#     for i in range(len(S)):
-#         for j in range(len(T)):
-#             dp[i + 1][j + 1] = max(dp[i][j] + (S[i] == T[j]),
-#                                    dp[i + 1][j], dp[i][j + 1], dp[i + 1][j + 1])
-#     return dp[len(S)][len(T)]
 
 
 @jit(nopython=True, cache=True)

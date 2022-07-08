@@ -12,6 +12,7 @@ from pytorch_lightning.utilities.distributed import rank_zero_info
 from model.four_square_model import FourSquareModel
 from config import register_configs, Config
 from utils.utils import *
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 @hydra.main(config_path=None, config_name="config")
@@ -32,7 +33,7 @@ def create_data(cfg: Config) -> None:
     # df = df.head(1000)
     df = df.reset_index(drop=True)
     
-    # # Infer language embedding
+    # Infer language embedding
     tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
     device = torch.device("cuda")
     model.to(device) ## model to GPU
@@ -44,12 +45,17 @@ def create_data(cfg: Config) -> None:
     k = 20
     k = min(len(df), k)
 
+    # Get neighbors
     dists, nears = get_geospatial_neightbors(k, df)
-
     topk_indices, cos_sims_word, cos_sims_dist = get_cos_sims(k, vectors, nears)
+
+    # Create pair dataframe
     train_df = create_pair_df(df, k, topk_indices, cos_sims_word, cos_sims_dist, nears, dists)
+
+    # Add basic features
     train_df = create_features(df, train_df)
 
+    # Pre inference tfidf
     tfidf_d = {}
     for col in vec_columns:
         tfidf = TfidfVectorizer()
@@ -60,24 +66,21 @@ def create_data(cfg: Config) -> None:
     df = df.set_index('id')
 
     train_df = reduce_memory(train_df)
+
+    # Add more features
     chunks = [train_df[i:i+10000] for i in range(0, len(train_df), 10000)]
-    for i, chunk in tqdm(enumerate(chunks)):
-        chunk = create_more_features(df, chunk, tfidf_d, id2index_d)
-        chunks[i] = chunk
-        # parallel_chunks = [chunks[i:i+10000] for i in range(0, len(chunks), 10000)]
-        # for j, p_chunk in enumerate(parallel_chunks):
-        #     p_chunk = dask.delayed(create_more_features)(df, p_chunk, tfidf_d, id2index_d)
-        #     parallel_chunks[j] = p_chunk
-        # chunk = dask.delayed(pd.concat)(parallel_chunks)
-        # chunk = chunk.compute()
-        # chunks[i] = chunk
+    chunked_chunks = [chunks[i:i+100] for i in range(0, len(chunks), 100)]
 
+    for i, chunks in tqdm(enumerate(chunked_chunks)):
+        temp = []
+        for chunk in tqdm(chunks):
+            chunk = create_more_features(df, chunk, tfidf_d, id2index_d)
+            temp.append(chunk)
 
-    train_df = pd.concat(chunks)
-    train_df['match'] = train_df.apply(lambda x: 1 if x['point_of_interest_1'] == x['point_of_interest_2'] else 0, axis=1)
-
-    # Save training data
-    train_df.to_parquet(cfg.path_cfg.ml_train_pair_parquet_path, index=False)
+        train_df = pd.concat(temp)
+        train_df['match'] = train_df.apply(lambda x: 1 if x['point_of_interest_1'] == x['point_of_interest_2'] else 0, axis=1)
+        # Save training data
+        train_df.to_parquet(f"/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/train_0_pair_{i}.parquet", index=False)
     
 
 if __name__ == "__main__":

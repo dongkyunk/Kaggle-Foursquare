@@ -2,17 +2,18 @@ import pandas as pd
 from flaml import AutoML
 from sklearn.model_selection import GroupKFold
 
-df = pd.read_parquet("/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/train_0_pair.parquet")
-df_1 = pd.read_parquet("/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/train_1_pair.parquet")
 
-df = pd.concat([df, df_1])
-df = df[df[['id', 'match_id']].apply(frozenset, axis=1).duplicated()] 
-df = df.head(1)
-df.to_csv('test.csv', index=False)
-# df = df[~df[['id', 'match_id']].apply(frozenset, axis=1).duplicated()] 
-# df = df[df['id']!=df['match_id']]
-# df['euc_dist'] = (df['longitude_diff'] **
-#                         2 + df['latitude_diff'] ** 2) ** 0.5
+df = [pd.read_parquet("/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/train_1_pair.parquet")]
+for i in range(14):
+    df.append(pd.read_parquet(f"/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/train_0_pair_{i}.parquet"))
+df = pd.concat(df)
+# df = df[df[['id', 'match_id']].apply(frozenset, axis=1).duplicated()] 
+# df = df.head(1)
+# df.to_csv('test.csv', index=False)
+df = df[~df[['id', 'match_id']].apply(frozenset, axis=1).duplicated()] 
+df = df[df['id']!=df['match_id']]
+df['euc_dist'] = (df['longitude_diff'] **
+                        2 + df['latitude_diff'] ** 2) ** 0.5
 
 
 
@@ -34,15 +35,13 @@ df.to_csv('test.csv', index=False)
 # df_0 = df[df['kfold'] == 0]
 # df_1 = df[df['kfold'] == 1]
 
-
+df = df.reset_index(drop=True)
 X_train = df.drop(['match', 'id', 'match_id', 'point_of_interest_1', 'point_of_interest_2'], axis=1)
 y_train = df['match'].astype(int)
-
+print(y_train.value_counts())
+del df
 # X_test = df_1.drop(['match', 'id', 'match_id', 'point_of_interest_1', 'point_of_interest_2'], axis=1)
 # y_test = df_1['match'].astype(int)
-
-print(X_train.columns)
-
 
 # print(X_train.max(axis = 0))
 
@@ -50,16 +49,29 @@ print(X_train.columns)
 
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
+from sklearn.model_selection import StratifiedKFold
 # automl = AutoML(use_ray=False, time_budget=2400, early_stop=True)
 # automl.fit(X_train, y_train, task="classification", estimator_list=["xgboost"])#,"xgboost"])
+skf = StratifiedKFold(n_splits=3, random_state=42)
+for i, (train_index, test_index) in enumerate(skf.split(X_train, y_train)):
+    model = LGBMClassifier(colsample_bytree=0.6206704891330953,
+                learning_rate=0.017986732071296262, max_bin=1023,
+                min_child_samples=9, n_estimators=6118, num_leaves=298,
+                reg_alpha=0.00706357318094864, reg_lambda=0.05558721086102777,
+                verbose=-1)
+    model.fit(X_train.iloc[train_index], y_train.iloc[train_index])
+    model.booster_.save_model(f'lgbm_20_{i}.txt')
 
-model = LGBMClassifier(colsample_bytree=0.6206704891330953,
-               learning_rate=0.017986732071296262, max_bin=1023,
-               min_child_samples=9, n_estimators=6118, num_leaves=298,
-               reg_alpha=0.00706357318094864, reg_lambda=0.05558721086102777,
-               verbose=-1)
+
+# model = LGBMClassifier(colsample_bytree=0.6206704891330953,
+#             learning_rate=0.017986732071296262, max_bin=1023,
+#             min_child_samples=9, n_estimators=6118, num_leaves=298,
+#             reg_alpha=0.00706357318094864, reg_lambda=0.05558721086102777,
+#             verbose=-1)
+# model.fit(X_train, y_train)
+# model.booster_.save_model('lgbm_20_other.txt')
+
 # # # model = pickle.load(open("/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/automl.pkl", "rb"))
-model.fit(X_train, y_train)
 
 # model = XGBClassifier(base_score=0.5, booster='gbtree',
 #               colsample_bylevel=0.2722707486171394, colsample_bynode=1,
@@ -87,5 +99,6 @@ model.fit(X_train, y_train)
 
 # import treelite
 # model = pickle.load(open("/home/dongkyun/Desktop/Other/Kaggle-Foursquare/data/lgbm2.pkl", 'rb'))
-model.booster_.save_model('lgbm_20_both.txt')
+
 # model = treelite.Model.load(f'model_fold{fold}.txt', model_format='lightgbm')
+
