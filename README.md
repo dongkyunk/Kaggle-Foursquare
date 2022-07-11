@@ -2,7 +2,7 @@
 
 Here is my solution for Kaggle Foursquare Location Matching. 
 
-This solution received a silver medal without any ensembling or complicated feature engineering.
+This solution received a **Silver** Medal without any ensembling or complicated feature engineering.
 
 The pipeline is is simple:
 
